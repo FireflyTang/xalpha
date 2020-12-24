@@ -1216,17 +1216,18 @@ def get_xueqiu_rt(code, token="a664afb60c7036c7947578ac1a5860c4cfb6b3b5"):
     )
     n = r["data"]["quote"]["name"]
     q = r["data"]["quote"]["current"]
-    try:
-        q = _float(q)
-    except TypeError:  # 针对雪球实时在9点后开盘前可能出现其他情形的fixup， 效果待 check
-        # 现在的怀疑是在9am 到9:15 am, 雪球 API current 字段返回 Null
-        q = _float(r["data"]["quote"]["last_close"])
+    if not q:
+        q = 0.0
+    else:
+        try:
+            q = _float(q)
+        except TypeError:  # 针对雪球实时在9点后开盘前可能出现其他情形的fixup， 效果待 check
+            # 现在的怀疑是在9am 到9:15 am, 雪球 API current 字段返回 Null
+            q = _float(r["data"]["quote"]["last_close"])
     q_ext = r["data"]["quote"].get("current_ext", None)
     percent = r["data"]["quote"]["percent"]
-    try:
+    if percent:
         percent = _float(percent)
-    except:
-        pass
     currency = r["data"]["quote"]["currency"]
     market = r["data"]["market"]["region"]
     timestr = dt.datetime.fromtimestamp(r["data"]["quote"]["time"] / 1000).strftime(

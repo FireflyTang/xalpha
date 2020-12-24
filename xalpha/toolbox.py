@@ -698,7 +698,6 @@ def cb_ytm(issue_date, rlist, cp, date=None, tax=1.0, guess=0.01):
     :param guess: YTM 估计初始值
     :return:
     """
-
     if rlist[-1] < 100:
         logger.warning(
             "the format of rlist must contain the final return more than 100 without interest of that year"
@@ -888,8 +887,12 @@ class CBCalculator:
             "date": self.date_obj.strftime("%Y-%m-%d"),
         }
         d["bond_value"] = cb_bond_value(self.issuedate, self.rlist, self.bondrate)
-        d["ytm_wo_tax"] = cb_ytm(self.issuedate, self.rlist, self.cbp)
-        d["ytm_wi_tax"] = cb_ytm(self.issuedate, self.rlist, self.cbp, tax=0.8)
+        try:
+            d["ytm_wo_tax"] = cb_ytm(self.issuedate, self.rlist, self.cbp)
+            d["ytm_wi_tax"] = cb_ytm(self.issuedate, self.rlist, self.cbp, tax=0.8)
+        except OverflowError:
+            d["ytm_wo_tax"] = None
+            d["ytm_wi_tax"] = None
         d["option_value"] = (
             BlackScholes(
                 self.stockp,
