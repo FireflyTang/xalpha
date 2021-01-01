@@ -439,7 +439,7 @@ def _float(n):
         pass
     if not n:
         logger.warning("_float met with None as input arguments")
-        raise ValueError 
+        raise ValueError
     return float(n)
 
 

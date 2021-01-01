@@ -492,7 +492,6 @@ class indicator:
                 is_symbol_show=False,
             )
         if rendered:
-            #line.load_javascript();
             return line.render_notebook()
         else:
             return line
