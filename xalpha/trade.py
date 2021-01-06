@@ -376,6 +376,8 @@ class trade:
                     feelabel = feelabel - 0.5
                     if abs(feelabel) < 1e-4:
                         feelabel = 0
+                    else:
+                        feelabel *= 100
                 else:
                     feelabel = None
                 value = int(value * 100) / 100
@@ -441,6 +443,7 @@ class trade:
 
                 if value > 0:  # value stands for purchase money
                     feelabel = 100 * value - int(100 * value)
+
                     if int(10 * feelabel) == 5:
                         feelabel = (feelabel - 0.5) * 100
                     else:
