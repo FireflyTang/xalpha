@@ -7,8 +7,9 @@ import datetime as dt
 import logging
 
 import pandas as pd
-from pyecharts.charts import Bar, Line
+from pyecharts.charts import Bar, Line, Scatter
 from pyecharts import options as opts
+from pyecharts.commons.utils import JsCode
 
 import xalpha.remain as rm
 from xalpha.cons import convert_date, line_opts, myround, xirr, yesterdayobj
@@ -217,51 +218,61 @@ def vtradecost(
             if (date - self.cftable.iloc[0].date).days >= 0:
                 cost = self.unitcost(date)
             costdata.append(cost)
-
-    coords = []
-    # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
-    for i, r in pcftable.iterrows():
-        coords.append([r.date, pprice[pprice["date"] <= r.date].iloc[-1]["netvalue"]])
-
     upper = pcftable.cash.abs().max()
     lower = pcftable.cash.abs().min()
     if upper == lower:
         upper = 2 * lower + 1  # avoid zero in denominator
 
-    def marker_factory(x, y):
-        buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-        if buy < 0:
-            color = "#ff7733"
-        else:
-
-            color = "#3366ff"
+    def scatter_factory(date_str, netvalue, buy):
         size = (abs(buy) - lower) / (upper - lower) * 5 + 5
-        return opts.MarkPointItem(
-            coord=[x.date(), y],
-            itemstyle_opts=opts.ItemStyleOpts(color=color),
-            # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
-            symbol="circle",
+        #如果是dict,则会把整个dict都传给js的data字段，无法对单个点进行属性配置；
+        #如果使用ScatterItem，可对单个点进行配置，但没有专用字段把额外的属性传给js，此时可借用name字段，也可以对name字段赋一个dict。
+        #但这里我们直接构造js函数
+        return opts.ScatterItem(
+            value=netvalue,
             symbol_size=size,
+            symbol="circle",
+            tooltip_opts=opts.TooltipOpts(
+                is_show=True,
+                trigger="item",
+                trigger_on="click",
+                axis_pointer_type="cross",
+                formatter=JsCode(
+                    """
+                    function(x) {{
+                        var res='';
+                        var buy={buy};
+                        res += '<div>';
+                        res += '{date_str}';
+                        res += '</div>';
+                        res += '<div>';
+                        res += x.marker;
+                        res += x.seriesName + ': ' + buy.toFixed(2);
+                        res += '</div>';
+                        return res;
+                    }}
+                    """.format(
+                        buy=buy, date_str=date_str
+                    )
+                )
+            )
         )
 
     line = Line()
-
     line.add_xaxis([d.date() for d in pprice.date])
-
+    line.add_yaxis(
+        series_name="基金净值",
+        y_axis=funddata,
+        is_symbol_show=False,
+        label_opts=None
+    )
     if unitcost:
         line.add_yaxis(
             series_name="持仓成本",
             y_axis=costdata,
             is_symbol_show=False,
+            label_opts=None
         )
-    line.add_yaxis(
-        series_name="基金净值",
-        y_axis=funddata,
-        is_symbol_show=False,
-        markpoint_opts=opts.MarkPointOpts(
-            data=[marker_factory(*c) for c in coords],
-        ),
-    )
     line.set_global_opts(
         datazoom_opts=[
             opts.DataZoomOpts(
@@ -275,13 +286,61 @@ def vtradecost(
                 range_end=100,
             ),
         ],
-        tooltip_opts=opts.TooltipOpts(
-            is_show=True,
-            trigger="axis",
-            trigger_on="mousemove",
-            axis_pointer_type="cross",
-        ),
+        tooltip_opts=
+            opts.TooltipOpts(
+                is_show=True,
+                trigger="axis",
+                trigger_on="mousemove",
+                axis_pointer_type="cross",
+                formatter=JsCode(
+                    """
+                    function(x) {
+                        var res='';
+                        res += '<div>';
+                        res += x[0].axisValue;
+                        res += '</div>';
+                        for (const v of x){
+                            if(v.seriesType != 'line') continue;
+                            res += '<div>';
+                            res += v.marker;
+                            res += v.seriesName + ': ' + v.data[1].toFixed(4);
+                            res += '</div>';
+                        }
+                        return res;
+                    }
+                    """
+                )
+            )
     )
+
+    scatter_xdata=[d.date() for d in pprice.date];
+    ydata_buy=[None for _ in range(len(pprice.date))];
+    ydata_sell=[None for _ in range(len(pprice.date))];
+    for i in range(len(pprice.date)):
+        if pprice.date.iloc[i] in pcftable.date.values:
+            date_str=pprice.date.iloc[i].strftime("%Y-%m-%d");
+            buy = pcftable[pcftable["date"] <= pprice.date.iloc[i]].iloc[-1]["cash"]
+            netvalue=pprice.netvalue.iloc[i];
+            if buy<0:
+                ydata_buy[i]=scatter_factory(date_str, netvalue,buy);
+            else:
+                ydata_sell[i]=scatter_factory(date_str, netvalue,buy);
+    ydata_buy[0]=opts.ScatterItem(value=None);#必须要有，add_yaxis通过第一个元素判断类型
+    ydata_sell[0]=opts.ScatterItem(value=None);
+
+    scatter=Scatter()
+    scatter.add_xaxis(scatter_xdata)
+    scatter.add_yaxis('买入',
+                      y_axis=ydata_buy,
+                      itemstyle_opts=opts.ItemStyleOpts(color= "#3366ff"),
+                      label_opts=None
+                     )
+    scatter.add_yaxis('卖出',
+                      y_axis=ydata_sell,
+                      itemstyle_opts=opts.ItemStyleOpts(color= "#ff7733"),
+                      label_opts=None
+                     )
+    line.overlap(scatter);
     if rendered:
         return line.render_notebook()
     else:
