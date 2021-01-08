@@ -5,7 +5,6 @@ module for implementation of indicator class, which is designed as MinIn for sys
 
 import pandas as pd
 from pyecharts.globals import CurrentConfig, NotebookType
-CurrentConfig.NOTEBOOK_TYPE = NotebookType.JUPYTER_LAB
 from pyecharts import options as opts
 from pyecharts.charts import Kline, Line, Bar, Grid
 from pyecharts.commons.utils import JsCode
