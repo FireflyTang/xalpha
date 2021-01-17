@@ -775,8 +775,10 @@ class CBCalculator:
             redeem_price = float(td_redeem_price.string)
         self.rlist.append(redeem_price)
         self.rlist[-1] -= self.rlist[-2]  # 最后一年不含息返多少
+        td_scode = b.select("td[class=jisilu_nav]")[0].contents[1]
+        if td_scode.sup: td_scode = td_scode.contents[2]
         self.scode = (
-            b.select("td[class=jisilu_nav]")[0].contents[1].string.split("-")[1].strip()
+            td_scode.string.split("-")[1].strip()
         )
         self.scode = ttjjcode(self.scode)  # 标准化股票代码
         if not zgj:
