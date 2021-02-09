@@ -514,6 +514,38 @@ def get_fundshare_byjq(code, **kws):
     return df
 
 
+@lru_cache(maxsize=1024)
+def get_futu_id(code):
+    r = rget("https://www.futunn.com/stock/{code}".format(code=code))
+    sind = r.text.find("securityId")
+    futuid = r.text[sind : sind + 30].split("=")[1].split(";")[0].strip(" ").strip("'")
+    sind = r.text.find("marketType")
+    market = r.text[sind : sind + 30].split("=")[1].split(";")[0].strip().strip("''")
+    return futuid, market
+
+
+def get_futu_historical(code, start=None, end=None):
+    fid, market = get_futu_id(code)
+    r = rget(
+        "https://www.futunn.com/new-quote/kline?security_id={fid}&type=2&market_type={market}".format(
+            fid=fid, market=market
+        )
+    )
+    df = pd.DataFrame(r.json()["data"]["list"])
+    df["date"] = df["k"].map(
+        lambda s: dt.datetime.fromtimestamp(s)
+        .replace(hour=0, minute=0, second=0, microsecond=0)
+        .replace(tzinfo=None)
+    )
+    df["open"] = df["o"] / 1000
+    df["close"] = df["c"] / 1000
+    df["high"] = df["h"] / 1000
+    df["low"] = df["l"] / 1000
+    df["volume"] = df["v"]
+    df = df.drop(["k", "t", "o", "c", "h", "l", "v"], axis=1)
+    return df
+
+
 def get_historical_fromsp(code, start=None, end=None, region="us", **kws):
     """
     标普官网数据源
@@ -869,7 +901,7 @@ def get_bond_rates(rating, date=None):
     """
     rating = rating.strip()
     rating_uid = {
-        "N": "2c9081e50a2f9606010a3068cae70001",
+        "N": "2c9081e50a2f9606010a3068cae70001",  # 国债
         "AAA": "2c9081e50a2f9606010a309f4af50111",
         "AAA-": "8a8b2ca045e879bf014607ebef677f8e",
         "AA+": "2c908188138b62cd01139a2ee6b51e25",
@@ -878,6 +910,11 @@ def get_bond_rates(rating, date=None):
         "A+": "2c9081e91b55cc84011be40946ca0925",
         "A": "2c9081e91e6a3313011e6d438a58000d",
         "A-": "8a8b2ca04142df6a014148ca880f3046",
+        "A": "2c9081e91e6a3313011e6d438a58000d",
+        "BBB+": "2c9081e91ea160e5011eab1f116c1a59",
+        "BBB": "8a8b2ca0455847ac0145650780ad68fb",
+        "BB": "8a8b2ca0455847ac0145650ba23b68ff",
+        "B": "8a8b2ca0455847ac0145650c3d726901",
     }
     # 上边字典不全，非常欢迎贡献 ：）
     def _fetch(date):
@@ -1002,6 +1039,8 @@ def _get_daily(
             25. 形如 HZ999001 HZ999005 格式的数据，代表了华证系列指数 http://www.chindices.com/indicator.html#
 
             26. 形如 B-AA+.3 格式的数据，代表了 AA+ 企业债三年久期利率数据 (每周)
+
+            27. 形如 fu-00700.HK 或 fu-BA.US 格式的数据，代表了来自 https://www.futunn.com/stock/BA-US 的日线行情数据
 
     :param start: str. "20200101", "2020/01/01", "2020-01-01" are all legal. The starting date of daily data.
     :param end: str. format is the same as start. The ending date of daily data.
@@ -1137,6 +1176,10 @@ def _get_daily(
 
     elif _from == "B":
         df = get_bond_rates_range(code, start=start, end=end)
+
+    elif _from == "fu":
+        code = code.replace(".", "-")
+        df = get_futu_historical(code, start=start, end=end)
 
     elif _from == "ycharts":
         df = get_historical_fromycharts(
